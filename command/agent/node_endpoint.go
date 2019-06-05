@@ -205,7 +205,7 @@ func (s *HTTPServer) nodePurge(resp http.ResponseWriter, req *http.Request, node
 		return nil, CodedError(405, ErrInvalidMethod)
 	}
 	args := structs.NodeDeregisterRequest{
-		NodeID: nodeID,
+		NodeIDs: []string{nodeID},
 	}
 	s.parseWriteRequest(req, &args.WriteRequest)
 	var out structs.NodeUpdateResponse
