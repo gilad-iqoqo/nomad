@@ -899,6 +899,7 @@ func ApiNetworkResourceToStructs(in []*api.NetworkResource) []*structs.NetworkRe
 				out[i].DynamicPorts[j] = structs.Port{
 					Label: dp.Label,
 					Value: dp.Value,
+					To:    dp.To,
 				}
 			}
 		}
@@ -909,6 +910,7 @@ func ApiNetworkResourceToStructs(in []*api.NetworkResource) []*structs.NetworkRe
 				out[i].ReservedPorts[j] = structs.Port{
 					Label: rp.Label,
 					Value: rp.Value,
+					To:    rp.To,
 				}
 			}
 		}
