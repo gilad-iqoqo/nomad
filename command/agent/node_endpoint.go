@@ -204,12 +204,12 @@ func (s *HTTPServer) nodePurge(resp http.ResponseWriter, req *http.Request, node
 	if req.Method != "PUT" && req.Method != "POST" {
 		return nil, CodedError(405, ErrInvalidMethod)
 	}
-	args := structs.NodeDeregisterRequest{
+	args := structs.NodeDeregisterBatchRequest{
 		NodeIDs: []string{nodeID},
 	}
 	s.parseWriteRequest(req, &args.WriteRequest)
 	var out structs.NodeUpdateResponse
-	if err := s.agent.RPC("Node.Deregister", &args, &out); err != nil {
+	if err := s.agent.RPC("Node.DeregisterBatch", &args, &out); err != nil {
 		return nil, err
 	}
 	setIndex(resp, out.Index)
