@@ -10,10 +10,9 @@ Prefer adding a new message to changing any existing RPC messages.
 * [ ] State method for modifying objects in a `Txn` in `nomad/state/state_store.go`
   * `nomad/state/state_store_test.go`
 * [ ] Handler for the request in `nomad/foo_endpoint.go`
-  * RPCs are resolved by matching the method name for bound structs,
-    e.g.: `"Node.Deregister"` calls the `(*Node)Deregister(req)`
-    method without any extra registration
-	* Wrapper for the HTTP request in `command/agent/foo_endpoint.go`
+  * RPCs are resolved by matching the method name for bound structs
+	[net/rpc](https://golang.org/pkg/net/rpc/)
+  * Wrapper for the HTTP request in `command/agent/foo_endpoint.go`
 * [ ] `nomad/core_sched.go` sends many RPCs
   * `ServersMeetMinimumVersion` asserts that the server cluster is
     upgraded, so use this to gaurd sending the new RPC, else send the old RPC
