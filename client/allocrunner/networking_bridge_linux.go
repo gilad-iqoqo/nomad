@@ -57,7 +57,7 @@ func newBridgeNetworkConfigurator(ctx context.Context, bridgeName, ipRange, cniP
 	b.cniConfig = libcni.NewCNIConfig(filepath.SplitList(cniPath), nil)
 
 	if b.bridgeName == "" {
-		b.bridgeName = "nomad"
+		b.bridgeName = defaultNomadBridgeName
 	}
 
 	if b.allocSubnet == "" {

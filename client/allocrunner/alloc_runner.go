@@ -136,9 +136,6 @@ type allocRunner struct {
 	// driverManager is responsible for dispensing driver plugins and registering
 	// event handlers
 	driverManager drivermanager.Manager
-
-	// networkConfigurator configures the alloc network interfaces, routes, etc
-	networkConfigurator NetworkConfigurator
 }
 
 // NewAllocRunner returns a new allocation runner.

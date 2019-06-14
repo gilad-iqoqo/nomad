@@ -129,5 +129,4 @@ func newNetworkConfigurator(alloc *structs.Allocation, config *clientconfig.Conf
 	default:
 		return &hostNetworkConfigurator{}
 	}
-	return nil
 }
