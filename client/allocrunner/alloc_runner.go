@@ -136,6 +136,9 @@ type allocRunner struct {
 	// driverManager is responsible for dispensing driver plugins and registering
 	// event handlers
 	driverManager drivermanager.Manager
+
+	// networkConfigurator configures the alloc network interfaces, routes, etc
+	networkConfigurator NetworkConfigurator
 }
 
 // NewAllocRunner returns a new allocation runner.
@@ -179,7 +182,7 @@ func NewAllocRunner(config *Config) (*allocRunner, error) {
 	ar.allocDir = allocdir.NewAllocDir(ar.logger, filepath.Join(config.ClientConfig.AllocDir, alloc.ID))
 
 	// Initialize the runners hooks.
-	if err := ar.initRunnerHooks(); err != nil {
+	if err := ar.initRunnerHooks(config.ClientConfig); err != nil {
 		return nil, err
 	}
 

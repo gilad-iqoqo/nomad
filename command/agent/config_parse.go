@@ -382,6 +382,9 @@ func parseClient(result **ClientConfig, list *ast.ObjectList) error {
 		"gc_max_allocs",
 		"no_host_uuid",
 		"server_join",
+		"cni_path",
+		"bridge_network_name",
+		"bridge_network_subnet",
 	}
 	if err := helper.CheckHCLKeys(listVal, valid); err != nil {
 		return err
