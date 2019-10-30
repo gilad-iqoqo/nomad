@@ -146,6 +146,9 @@ type Driver struct {
 
 	// logger will log to the Nomad agent
 	logger hclog.Logger
+
+	// ettf
+	ettf float64
 }
 
 // NewMockDriver returns a new DriverPlugin implementation
@@ -167,6 +170,7 @@ func NewMockDriver(logger hclog.Logger) drivers.DriverPlugin {
 		ctx:            ctx,
 		signalShutdown: cancel,
 		logger:         logger,
+		ettf:           rand.Float64(),
 	}
 }
 
@@ -338,6 +342,7 @@ func (d *Driver) buildFingerprint() *drivers.Fingerprint {
 	} else {
 		health = drivers.HealthStateHealthy
 		attrs["driver.mock"] = pstructs.NewBoolAttribute(true)
+		attrs["rating.ETTF"] = pstructs.NewFloatAttribute(d.ettf, pstructs.UnitNumber)
 		desc = drivers.DriverHealthy
 	}
 

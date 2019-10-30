@@ -47,6 +47,9 @@ const (
 	UnitkW = "kW"
 	UnitMW = "MW"
 	UnitGW = "GW"
+
+	// Scalar units
+	UnitNumber = ""
 )
 
 var (
@@ -241,6 +244,15 @@ var (
 			Name:       UnitGW,
 			Base:       UnitWatt,
 			Multiplier: Pow(10, 9),
+		},
+	}
+
+	number = []*Unit{
+		{
+			Name:              UnitNumber,
+			Base:              UnitScalar,
+			Multiplier:        1,
+			InverseMultiplier: true,
 		},
 	}
 )
