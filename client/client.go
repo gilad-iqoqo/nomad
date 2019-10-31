@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"net"
 	"net/rpc"
 	"os"
@@ -1700,20 +1701,24 @@ func (c *Client) registerNode() error {
 
 func (c *Client) updateEttfCB(hbSuccess bool, ts time.Time) {
 	ettbStr := c.heartbeatETTFCB.String()
-	c.logger.Debug("GGG before", c.nodeID, ettbStr)
+	c.logger.Debug("GGG 1")
+	nid, _, _ := c.nodeID()
+	c.logger.Error("GGG before", nid, ettbStr)
 
-	err := c.heartbeatETTFCB.HeartBeat(ts, hbSuccess)
+	reset, err := c.heartbeatETTFCB.HeartBeat(ts, hbSuccess)
 
 	if !hbSuccess {
-		c.logger.Error("GGG: missed HB", c.nodeID, "TimeStamp:", ts, "ETTB:", ettbStr, hbSuccess)
+		c.logger.Error("GGG: missed HB", "nid", nid, "TimeStamp", ts.String(), "ETTB:", ettbStr, "success", strconv.FormatBool(hbSuccess))
 	}
 
 	if err != nil {
-		c.logger.Error("GGG: failed to update cb HB", c.nodeID, "TimeStamp:", ts, "ETTB:", ettbStr, hbSuccess)
+		c.logger.Error("GGG: failed to update cb HB", "nid", nid, "TimeStamp", ts.String(), "ETTB:", ettbStr, "success", strconv.FormatBool(hbSuccess), "err", err.Error())
 	}
+	c.logger.Debug("GGG 4")
 
 	ettbStr = c.heartbeatETTFCB.String()
-	c.logger.Debug("GGG after", c.nodeID, ettbStr)
+	c.logger.Error("GGG after", nid, ettbStr, "reset", reset)
+	c.logger.Debug("GGG 5")
 
 }
 
@@ -1725,6 +1730,19 @@ func (c *Client) updateNodeStatus() error {
 		Status:       structs.NodeStatusReady,
 		WriteRequest: structs.WriteRequest{Region: c.Region()},
 	}
+
+	//TODO: DONOT COMMIT THIS IS A BUG!!!!!
+	//Intentionally loose a heartbeat
+	choice := rand.Float32()
+	if choice < 0.15 {
+		count := rand.Int() % 8
+		c.logger.Error("GGG: Skipping heartbeats")
+		for i := 0; i < count; i++ {
+			c.logger.Error("GGG: Sleep...", strconv.Itoa(i))
+			time.Sleep(c.heartbeatTTL)
+		}
+	}
+
 	var resp structs.NodeUpdateResponse
 	if err := c.RPC("Node.UpdateStatus", &req, &resp); err != nil {
 		c.triggerDiscovery()
@@ -1744,7 +1762,6 @@ func (c *Client) updateNodeStatus() error {
 	c.lastHeartbeat = time.Now()
 	c.heartbeatTTL = resp.HeartbeatTTL
 	c.haveHeartbeated = true
-	c.updateEttfCB(true, last)
 	c.heartbeatLock.Unlock()
 	c.logger.Trace("next heartbeat", "period", resp.HeartbeatTTL)
 
@@ -1753,9 +1770,15 @@ func (c *Client) updateNodeStatus() error {
 
 		// We have potentially missed our TTL log how delayed we were
 		if haveHeartbeated {
+			c.updateEttfCB(false, last)
+
 			c.logger.Warn("missed heartbeat",
 				"req_latency", end.Sub(start), "heartbeat_ttl", oldTTL, "since_last_heartbeat", time.Since(last))
+		} else {
+			c.updateEttfCB(true, last)
 		}
+	} else {
+		c.updateEttfCB(true, last)
 	}
 
 	// Update the number of nodes in the cluster so we can adjust our server

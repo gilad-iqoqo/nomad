@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/rand"
 	"net"
 	"os"
 	"path/filepath"
@@ -9351,6 +9352,7 @@ type ACLTokenUpsertResponse struct {
 
 // ETTFControlBlock is used to follow the ETTF (expected time to failure stats) based on node heartbeats.
 type ETTFControlBlock struct {
+	ID                         float64
 	NumIntervals               float64
 	SumIntervalsSeconds        float64
 	SumIntervalsSquaresSeconds float64 // sum(t_i^2) / count(t_i)
@@ -9367,15 +9369,19 @@ func NewETTFControlBlock(hbttl time.Duration, firstTs time.Time) *ETTFControlBlo
 		LastIntervalBegining: firstTs,
 		LastIntervalUpdate:   firstTs,
 		LastHeartBeatSuccess: true,
+		ID:                   rand.Float64(),
 	}
 }
 
-func (e *ETTFControlBlock) HeartBeat(ts time.Time, hbSuccess bool) error {
+// HeartBeat - record a heartbeat in the ettf cb
+func (e *ETTFControlBlock) HeartBeat(ts time.Time, hbSuccess bool) (reset bool, err error) {
 	var mErr multierror.Error
+	reset = false
 
 	if ts.Before(e.LastIntervalUpdate) {
+		panic(err.Error())
 		mErr.Errors = append(mErr.Errors, fmt.Errorf("ts %s is before e.LastIntervalUpdate %s", ts.String(), e.LastIntervalUpdate.String()))
-		return mErr.ErrorOrNil()
+		return reset, mErr.ErrorOrNil()
 	}
 
 	// we are not in valid HBstate
@@ -9384,35 +9390,69 @@ func (e *ETTFControlBlock) HeartBeat(ts time.Time, hbSuccess bool) error {
 			e.LastIntervalBegining = ts
 			e.LastIntervalUpdate = ts
 		}
-		return nil
+		e.LastHeartBeatSuccess = hbSuccess
+		return reset, mErr.ErrorOrNil()
 	}
 
 	// check if there was a hiccup
-	if ts.Sub(e.LastIntervalUpdate) > e.HeartBeatTTL || !hbSuccess {
-		lastInterval := e.LastIntervalUpdate.Sub(e.LastIntervalBegining)
+	heartBeatResetTTL := e.HeartBeatTTL * 5 //take grace factor
+
+	if ts.Sub(e.LastIntervalUpdate) > heartBeatResetTTL || !hbSuccess {
+		lastInterval, err := e.LastInterval()
+		if err != nil {
+			panic(err.Error())
+			mErr.Errors = append(mErr.Errors, err)
+		}
 		e.NumIntervals++
-		e.SumIntervalsSeconds += lastInterval.Seconds()
-		e.SumIntervalsSquaresSeconds += math.Pow(lastInterval.Seconds(), 2)
+		e.SumIntervalsSeconds += lastInterval
+		e.SumIntervalsSquaresSeconds += math.Pow(lastInterval, 2)
 		if hbSuccess {
 			e.LastIntervalBegining = ts
 		}
+		reset = true
+
 	}
 	e.LastHeartBeatSuccess = hbSuccess
 	e.LastIntervalUpdate = ts
 
 	// TODO harden to disk
-	return nil
+	return reset, mErr.ErrorOrNil()
+}
+
+// LastInterval - calculate current interval time
+func (e *ETTFControlBlock) LastInterval() (sec float64, err error) {
+	sec = e.LastIntervalUpdate.Sub(e.LastIntervalBegining).Seconds()
+	if sec < 0 {
+		err = errors.New("Negative duration error")
+	} else {
+		err = nil
+	}
+	return sec, err
 }
 
 // Stats - get the ETTF stats
-func (e *ETTFControlBlock) Stats() (count, mean, stdev float64) {
-	count = e.NumIntervals
-	mean = e.SumIntervalsSeconds / count
-	stdev = math.Sqrt(e.SumIntervalsSquaresSeconds/count - math.Pow(mean, 2))
-	return count, mean, stdev
+func (e *ETTFControlBlock) Stats() (count, mean, stdev float64, ttl time.Duration, err error) {
+	count = e.NumIntervals + 1
+	mean = 0
+	stdev = 0
+	currInterval, err := e.LastInterval()
+	ttl = e.HeartBeatTTL
+	if count != 0 && err == nil {
+		mean = (e.SumIntervalsSeconds + currInterval) / count
+		stdev = math.Sqrt((e.SumIntervalsSquaresSeconds+math.Pow(currInterval, 2))/count - math.Pow(mean, 2))
+	}
+	return count, mean, stdev, ttl, err
 }
 
 func (e *ETTFControlBlock) String() string {
-	count, mean, stdev := e.Stats()
-	return fmt.Sprintf("count %f, mean %f, stdev %f", count, mean, stdev)
+	count, mean, stdev, ttl, err := e.Stats()
+	if err != nil {
+		return err.Error()
+	}
+	currInterval, err2 := e.LastInterval()
+	if err2 != nil {
+		return err.Error()
+	}
+	return fmt.Sprintf("HTTPBB[%f] count %f, mean %f, stdev %f, ttl %f (sec). Last interval duration %f sec",
+		e.ID, count, mean, stdev, ttl.Seconds(), currInterval)
 }
