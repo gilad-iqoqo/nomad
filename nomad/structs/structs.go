@@ -9453,6 +9453,6 @@ func (e *ETTFControlBlock) String() string {
 	if err2 != nil {
 		return err.Error()
 	}
-	return fmt.Sprintf("HTTPBB[%f] count %f, mean %f, stdev %f, ttl %f (sec). Last interval duration %f sec",
+	return fmt.Sprintf("ETTFCB[%f] count %f, mean %f, stdev %f, ttl %f (sec). Last interval duration %f sec",
 		e.ID, count, mean, stdev, ttl.Seconds(), currInterval)
 }
