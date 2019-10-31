@@ -181,6 +181,7 @@ type Client struct {
 	heartbeatTTL    time.Duration
 	haveHeartbeated bool
 	heartbeatLock   sync.Mutex
+	heartbeatETTFCB *structs.ETTFControlBlock
 
 	// triggerDiscoveryCh triggers Consul discovery; see triggerDiscovery
 	triggerDiscoveryCh chan struct{}
@@ -1693,7 +1694,27 @@ func (c *Client) registerNode() error {
 	defer c.heartbeatLock.Unlock()
 	c.lastHeartbeat = time.Now()
 	c.heartbeatTTL = resp.HeartbeatTTL
+	c.heartbeatETTFCB = structs.NewETTFControlBlock(c.heartbeatTTL, c.lastHeartbeat)
 	return nil
+}
+
+func (c *Client) updateEttfCB(hbSuccess bool, ts time.Time) {
+	ettbStr := c.heartbeatETTFCB.String()
+	c.logger.Debug("GGG before", c.nodeID, ettbStr)
+
+	err := c.heartbeatETTFCB.HeartBeat(ts, hbSuccess)
+
+	if !hbSuccess {
+		c.logger.Error("GGG: missed HB", c.nodeID, "TimeStamp:", ts, "ETTB:", ettbStr, hbSuccess)
+	}
+
+	if err != nil {
+		c.logger.Error("GGG: failed to update cb HB", c.nodeID, "TimeStamp:", ts, "ETTB:", ettbStr, hbSuccess)
+	}
+
+	ettbStr = c.heartbeatETTFCB.String()
+	c.logger.Debug("GGG after", c.nodeID, ettbStr)
+
 }
 
 // updateNodeStatus is used to heartbeat and update the status of the node
@@ -1723,6 +1744,7 @@ func (c *Client) updateNodeStatus() error {
 	c.lastHeartbeat = time.Now()
 	c.heartbeatTTL = resp.HeartbeatTTL
 	c.haveHeartbeated = true
+	c.updateEttfCB(true, last)
 	c.heartbeatLock.Unlock()
 	c.logger.Trace("next heartbeat", "period", resp.HeartbeatTTL)
 

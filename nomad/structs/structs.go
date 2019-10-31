@@ -9348,3 +9348,71 @@ type ACLTokenUpsertResponse struct {
 	Tokens []*ACLToken
 	WriteMeta
 }
+
+// ETTFControlBlock is used to follow the ETTF (expected time to failure stats) based on node heartbeats.
+type ETTFControlBlock struct {
+	NumIntervals               float64
+	SumIntervalsSeconds        float64
+	SumIntervalsSquaresSeconds float64 // sum(t_i^2) / count(t_i)
+	LastIntervalBegining       time.Time
+	LastIntervalUpdate         time.Time
+	LastHeartBeatSuccess       bool
+	HeartBeatTTL               time.Duration
+}
+
+// NewETTFControlBlock - build new ETTF CB
+func NewETTFControlBlock(hbttl time.Duration, firstTs time.Time) *ETTFControlBlock {
+	return &ETTFControlBlock{
+		HeartBeatTTL:         hbttl,
+		LastIntervalBegining: firstTs,
+		LastIntervalUpdate:   firstTs,
+		LastHeartBeatSuccess: true,
+	}
+}
+
+func (e *ETTFControlBlock) HeartBeat(ts time.Time, hbSuccess bool) error {
+	var mErr multierror.Error
+
+	if ts.Before(e.LastIntervalUpdate) {
+		mErr.Errors = append(mErr.Errors, fmt.Errorf("ts %s is before e.LastIntervalUpdate %s", ts.String(), e.LastIntervalUpdate.String()))
+		return mErr.ErrorOrNil()
+	}
+
+	// we are not in valid HBstate
+	if !e.LastHeartBeatSuccess {
+		if hbSuccess {
+			e.LastIntervalBegining = ts
+			e.LastIntervalUpdate = ts
+		}
+		return nil
+	}
+
+	// check if there was a hiccup
+	if ts.Sub(e.LastIntervalUpdate) > e.HeartBeatTTL || !hbSuccess {
+		lastInterval := e.LastIntervalUpdate.Sub(e.LastIntervalBegining)
+		e.NumIntervals++
+		e.SumIntervalsSeconds += lastInterval.Seconds()
+		e.SumIntervalsSquaresSeconds += math.Pow(lastInterval.Seconds(), 2)
+		if hbSuccess {
+			e.LastIntervalBegining = ts
+		}
+	}
+	e.LastHeartBeatSuccess = hbSuccess
+	e.LastIntervalUpdate = ts
+
+	// TODO harden to disk
+	return nil
+}
+
+// Stats - get the ETTF stats
+func (e *ETTFControlBlock) Stats() (count, mean, stdev float64) {
+	count = e.NumIntervals
+	mean = e.SumIntervalsSeconds / count
+	stdev = math.Sqrt(e.SumIntervalsSquaresSeconds/count - math.Pow(mean, 2))
+	return count, mean, stdev
+}
+
+func (e *ETTFControlBlock) String() string {
+	count, mean, stdev := e.Stats()
+	return fmt.Sprintf("count %f, mean %f, stdev %f", count, mean, stdev)
+}
