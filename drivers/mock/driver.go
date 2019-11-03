@@ -342,7 +342,7 @@ func (d *Driver) buildFingerprint() *drivers.Fingerprint {
 	} else {
 		health = drivers.HealthStateHealthy
 		attrs["driver.mock"] = pstructs.NewBoolAttribute(true)
-		attrs["rating.ETTF"] = pstructs.NewFloatAttribute(d.ettf, pstructs.UnitNumber)
+		attrs["driver.stam"] = pstructs.NewFloatAttribute(rand.Float64(), pstructs.UnitNumber)
 		desc = drivers.DriverHealthy
 	}
 

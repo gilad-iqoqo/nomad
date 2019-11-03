@@ -26,6 +26,7 @@ const (
 	UnitByteRate
 	UnitHertz
 	UnitWatt
+	UnitSeconds
 )
 
 // Unit describes a unit and its multiplier over the base unit type

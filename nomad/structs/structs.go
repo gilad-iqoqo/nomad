@@ -9350,6 +9350,9 @@ type ACLTokenUpsertResponse struct {
 	WriteMeta
 }
 
+const ettfHistogramSize = 16
+const ettfMinBucketSec = 1
+
 // ETTFControlBlock is used to follow the ETTF (expected time to failure stats) based on node heartbeats.
 type ETTFControlBlock struct {
 	ID                         float64
@@ -9360,6 +9363,7 @@ type ETTFControlBlock struct {
 	LastIntervalUpdate         time.Time
 	LastHeartBeatSuccess       bool
 	HeartBeatTTL               time.Duration
+	Histogram                  [ettfHistogramSize]int
 }
 
 // NewETTFControlBlock - build new ETTF CB
@@ -9373,12 +9377,25 @@ func NewETTFControlBlock(hbttl time.Duration, firstTs time.Time) *ETTFControlBlo
 	}
 }
 
+func (e *ETTFControlBlock) updatehistogram(intervalSec float64) (err error) {
+	err = nil
+	if intervalSec <= 0 {
+		err = errors.New("Negative duration error")
+		return err
+	}
+	l := math.Floor(math.Log2(intervalSec / ettfMinBucketSec))
+	bucket := int(math.Max(math.Min(l, ettfHistogramSize-1), 0))
+	e.Histogram[bucket]++
+	return err
+}
+
 // HeartBeat - record a heartbeat in the ettf cb
 func (e *ETTFControlBlock) HeartBeat(ts time.Time, hbSuccess bool) (reset bool, err error) {
 	var mErr multierror.Error
 	reset = false
 
 	if ts.Before(e.LastIntervalUpdate) {
+		//TODO: REMOVE PANIC
 		panic(err.Error())
 		mErr.Errors = append(mErr.Errors, fmt.Errorf("ts %s is before e.LastIntervalUpdate %s", ts.String(), e.LastIntervalUpdate.String()))
 		return reset, mErr.ErrorOrNil()
@@ -9406,6 +9423,11 @@ func (e *ETTFControlBlock) HeartBeat(ts time.Time, hbSuccess bool) (reset bool, 
 		e.NumIntervals++
 		e.SumIntervalsSeconds += lastInterval
 		e.SumIntervalsSquaresSeconds += math.Pow(lastInterval, 2)
+		err = e.updatehistogram(lastInterval)
+		if err != nil {
+			panic(err.Error())
+			mErr.Errors = append(mErr.Errors, err)
+		}
 		if hbSuccess {
 			e.LastIntervalBegining = ts
 		}
@@ -9432,6 +9454,9 @@ func (e *ETTFControlBlock) LastInterval() (sec float64, err error) {
 
 // Stats - get the ETTF stats
 func (e *ETTFControlBlock) Stats() (count, mean, stdev float64, ttl time.Duration, err error) {
+	if e == nil {
+		return 0, 0, 0, 0, errors.New("None object")
+	}
 	count = e.NumIntervals + 1
 	mean = 0
 	stdev = 0
@@ -9444,6 +9469,12 @@ func (e *ETTFControlBlock) Stats() (count, mean, stdev float64, ttl time.Duratio
 	return count, mean, stdev, ttl, err
 }
 
+func (e *ETTFControlBlock) HistogramStr() string {
+	delim := ", "
+	s := "[" + strings.Trim(strings.Join(strings.Split(fmt.Sprint(e.Histogram), " "), delim), "[]") + "]"
+	return s
+}
+
 func (e *ETTFControlBlock) String() string {
 	count, mean, stdev, ttl, err := e.Stats()
 	if err != nil {
@@ -9453,6 +9484,6 @@ func (e *ETTFControlBlock) String() string {
 	if err2 != nil {
 		return err.Error()
 	}
-	return fmt.Sprintf("ETTFCB[%f] count %f, mean %f, stdev %f, ttl %f (sec). Last interval duration %f sec",
-		e.ID, count, mean, stdev, ttl.Seconds(), currInterval)
+	return fmt.Sprintf("ETTFCB[%f] count %f, mean %f, stdev %f, ttl %f (sec). Last interval duration %f sec. Histogram %s",
+		e.ID, count, mean, stdev, ttl.Seconds(), currInterval, e.HistogramStr())
 }

@@ -1318,6 +1318,7 @@ func (c *Client) setupNode() error {
 		node.Meta["connect.log_level"] = defaultConnectLogLevel
 	}
 
+	c.setEttfNodeAttr(node.Attributes)
 	return nil
 }
 
@@ -1328,6 +1329,7 @@ func (c *Client) updateNodeFromFingerprint(response *fingerprint.FingerprintResp
 	defer c.configLock.Unlock()
 
 	nodeHasChanged := false
+	c.logger.Error("GGG updateNodeFromFingerprint")
 
 	for name, newVal := range response.Attributes {
 		oldVal := c.config.Node.Attributes[name]
@@ -1384,6 +1386,10 @@ func (c *Client) updateNodeFromFingerprint(response *fingerprint.FingerprintResp
 			c.config.Node.NodeResources.Merge(response.NodeResources)
 			nodeHasChanged = true
 		}
+	}
+
+	if c.setEttfNodeAttr(c.config.Node.Attributes) {
+		nodeHasChanged = true
 	}
 
 	if nodeHasChanged {
@@ -1695,7 +1701,10 @@ func (c *Client) registerNode() error {
 	defer c.heartbeatLock.Unlock()
 	c.lastHeartbeat = time.Now()
 	c.heartbeatTTL = resp.HeartbeatTTL
-	c.heartbeatETTFCB = structs.NewETTFControlBlock(c.heartbeatTTL, c.lastHeartbeat)
+
+	if c.heartbeatETTFCB == nil {
+		c.heartbeatETTFCB = structs.NewETTFControlBlock(c.heartbeatTTL, c.lastHeartbeat)
+	}
 	return nil
 }
 
@@ -1703,22 +1712,53 @@ func (c *Client) updateEttfCB(hbSuccess bool, ts time.Time) {
 	ettbStr := c.heartbeatETTFCB.String()
 	c.logger.Debug("GGG 1")
 	nid, _, _ := c.nodeID()
-	c.logger.Error("GGG before", nid, ettbStr)
+	c.logger.Error("GGG before", "nid", nid, "TimeStamp", ts.String(), "ETTB", ettbStr)
 
 	reset, err := c.heartbeatETTFCB.HeartBeat(ts, hbSuccess)
 
 	if !hbSuccess {
-		c.logger.Error("GGG: missed HB", "nid", nid, "TimeStamp", ts.String(), "ETTB:", ettbStr, "success", strconv.FormatBool(hbSuccess))
+		c.logger.Error("GGG: missed HB", "nid", nid, "TimeStamp", ts.String(), "ETTB", ettbStr, "success", strconv.FormatBool(hbSuccess))
 	}
 
 	if err != nil {
-		c.logger.Error("GGG: failed to update cb HB", "nid", nid, "TimeStamp", ts.String(), "ETTB:", ettbStr, "success", strconv.FormatBool(hbSuccess), "err", err.Error())
+		c.logger.Error("GGG: failed to update cb HB", "nid", nid, "TimeStamp", ts.String(), "ETTB", ettbStr, "success", strconv.FormatBool(hbSuccess), "err", err.Error(), "reset", reset)
 	}
 	c.logger.Debug("GGG 4")
 
 	ettbStr = c.heartbeatETTFCB.String()
-	c.logger.Error("GGG after", nid, ettbStr, "reset", reset)
+	c.logger.Error("GGG after", "nid", nid, "TimeStamp", ts.String(), "ETTB", ettbStr, "reset", reset)
 	c.logger.Debug("GGG 5")
+
+}
+
+func (c *Client) setEttfNodeAttr(attr map[string]string) bool {
+	//c.logger.Error("GGG setEttfNodeAttr")
+	var count, mean, stdev float64
+	var ttl time.Duration
+	var hist string
+	var err error
+	if c.heartbeatETTFCB == nil {
+		count, mean, stdev, ttl, hist, err = 0.0, 0.0, 0.0, time.Duration(0), "[]", nil
+		//c.logger.Error("GGG setEttfNodeAttr nil", "heartbeatETTFCB", c.heartbeatETTFCB)
+	} else {
+		count, mean, stdev, ttl, err = c.heartbeatETTFCB.Stats()
+		hist = c.heartbeatETTFCB.HistogramStr()
+		//c.logger.Error("GGG setEttfNodeAttr NOT nil", "heartbeatETTFCB", c.heartbeatETTFCB)
+
+	}
+	if err == nil {
+		attr["ettf.count"] = strconv.FormatFloat(count, 'g', 4, 64)
+		attr["ettf.mean"] = strconv.FormatFloat(mean, 'g', 4, 64)
+		attr["ettf.stdev"] = strconv.FormatFloat(stdev, 'g', 4, 64)
+		attr["ettf.ttl"] = ttl.String()
+		attr["ettf.hist"] = hist
+
+		//c.logger.Error("GGG setEttfNodeAttr updated", "attr", attr)
+		return true
+	} else {
+		//c.logger.Error("GGG setEttfNodeAttr updated", "err", err)
+	}
+	return false
 
 }
 
